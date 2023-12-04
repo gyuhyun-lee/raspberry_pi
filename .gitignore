@@ -20,7 +20,10 @@
 *.c.swo
 
 *.spv
+*.o
 
+/copy
+/build
 /external
 /misc
 
@@ -43,3 +46,5 @@ Thumbs.db
 *.metallibsym
 code/\
 \
+code/copy
+build
