@@ -4,16 +4,9 @@ MAKEFLAGS += --silent
 AS_FLAGS = --warn --fatal-warnings
 COMPILER_FLAGS = -Wall -O2 -nostdlib -nostartfiles -ffreestanding 
 BUILD_PATH = ../build
+SDCARD_PATH = /Volumes/RPIBOOT
 
-gcc : clean kernel8.img
-
-clean :
-	rm -f $(BUILD_PATH)/*.o
-	rm -f $(BUILD_PATH)/*.bin
-	rm -f $(BUILD_PATH)/*.srec
-	rm -f $(BUILD_PATH)/*.elf
-	rm -f $(BUILD_PATH)/*.img
-	rm -f $(BUILD_PATH)/*.disasm
+gcc : kernel8.img cleanup copy_to_sdcard 
 
 kernel8.img :  
 	aarch64-none-elf-as $(AS_FLAGS) entry.s -o $(BUILD_PATH)/entry.o
@@ -26,5 +19,19 @@ kernel8.img :
 
 	# output disassembly
 	aarch64-none-elf-objdump -D $(BUILD_PATH)/kernel8.elf > kernel8.disasm
+
+cleanup :
+	rm -f $(BUILD_PATH)/*.o
+	rm -f $(BUILD_PATH)/*.bin
+	rm -f $(BUILD_PATH)/*.srec
+	rm -f $(BUILD_PATH)/*.elf
+
+# happens only if the sdcard(you can name however you want, just change the PRIBOOT part)
+copy_to_sdcard : $(SDCARD_PATH)
+	rm -f $(SDCARD_PATH)/kernel8.img 
+	rm -f $(SDCARD_PATH)/config.txt 
+
+	cp config.txt $(SDCARD_PATH)
+	cp $(BUILD_PATH)/kernel8.img $(SDCARD_PATH)
 
 

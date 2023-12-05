@@ -2,9 +2,12 @@ typedef unsigned u32;
 typedef long unsigned u64;
 typedef int i32;
 
+typedef float f32;
+typedef double f64;
+
 // extern functions from the assembly file
 extern u64 get_pc();
-// extern void muart_transmit_32(u32 data);
+extern void muart_transmit_32(u32 data, u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
 
 // this is the base 'physical' address of the peripheral IOs. 
 // the 'bus' address actually starts at 0x7e.... 
@@ -44,7 +47,8 @@ notmain(void)
     *((AUX_MU_MCR_REG)) = 0; 
     *((AUX_MU_IIR_REG)) = 0x6; // clear T/C FIFOs
     // *(u32 *)(AUX_MU_IIR_REG) = 0xC6; // clear T/C FIFO
-    *((AUX_MU_BAUD_REG)) = 270; // TODO(gh) system clock freq is not 400mhz in raspberry pi 3?
+    // *((AUX_MU_BAUD_REG)) = 270; // TODO(gh) system clock freq is not 400mhz in raspberry pi 3?
+    *((AUX_MU_BAUD_REG)) = 433; // TODO(gh) system clock freq is not 400mhz in raspberry pi 3?
 
     // enable gpio 14(PI's transmitter), 15(PI's receiver) to for UART 
     u32 xu32_GPFSEL1 = *((GPFSEL1));
@@ -52,8 +56,6 @@ notmain(void)
     xu32_GPFSEL1 |= (2<<12)|(2<<15);
     *((GPFSEL1)) = xu32_GPFSEL1;
 
-    u64 xu64_pc = get_pc();
-    // *((volatile u32 *)(AUX_MU_CNTL_REG)) = 2; // enable transmitter, TODO(gh) is there a reason to set this to 0 first, and then set it again to 2? maybe because both of them are enabled when reset?
 #if 0
     // set GPIO 29 function to 'output'
     u32 xu32_GPFSEL = *(u32 *)(GPFSEL2);
@@ -62,24 +64,10 @@ notmain(void)
     *(u32 *)(GPFSEL2) = xu32_GPFSEL;
 #endif
 
-    u32 nibble_index = 15;
+    u64 xu64_pc = get_pc();
     while(1)
     {
-        // check if the transmitter FIFO is empty, so it's safe to write another byte
-        while(1)
-        {
-            u32 xu32_uart_lsr_reg = *((AUX_MU_LSR_REG));
-            if(xu32_uart_lsr_reg & 0x20) 
-            {
-                break;
-            }
-        }
-
-        // TODO(gh) same bits to transmit / receive data from FIFO? really?
-        u32 bit_shift = (nibble_index << 2);
-        *((AUX_MU_IO_REG)) = 0x30 + ((xu64_pc >> bit_shift) & 0xf);
-
-        nibble_index--;
+        muart_transmit_32((u32)xu64_pc, (u64)AUX_MU_LSR_REG, (u64)AUX_MU_IO_REG);
     }
 
     return(0);
@@ -98,6 +86,17 @@ notmain(void)
 // when is uart interrupt useful?
 
 // ret x0 vs just ret? 
+
+// armv8 ABI(how many input registers?)
+
+// 115200 baud rate is being used very often, it's because it's the fastest one? 
+// uart only supports up to 115200 baud rate because it's very old?
+
+// how would you construct a multi-platform bare metal graphics project?(raspberry pi + windows/mac?)
+
+// parity bit - is it really needed? (i.e when I transfer my code, do I need a more stable uart(PL01 UART instead of mini UART) connection)
+
+// 
 
 // ================================================================================================================================================================================================
 // I learn!
