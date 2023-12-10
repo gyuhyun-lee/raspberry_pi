@@ -1,60 +1,36 @@
-typedef unsigned u32;
-typedef long unsigned u64;
-typedef int i32;
-
-typedef float f32;
-typedef double f64;
+#include "peripherals.h"
 
 // extern functions from the assembly file
 extern u64 get_pc();
+extern u64 get_el();
+extern u32 get_system_control_register();
 extern void muart_transmit_32(u32 data, u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
 
-// this is the base 'physical' address of the peripheral IOs. 
-// the 'bus' address actually starts at 0x7e.... 
-#define PERIPHERAL_BASE (0x3f000000) 
+extern u32 muart_receive_8(u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
 
-// defining all the peripheral addresses
-#define GPFSEL0 ((volatile u32 *)(PERIPHERAL_BASE + 0x200000))
-#define GPFSEL1 ((volatile u32 *)(PERIPHERAL_BASE + 0x200004))
-#define GPFSEL2 ((volatile u32 *)(PERIPHERAL_BASE + 0x200008))
-#define GPSET0  ((volatile u32 *)(PERIPHERAL_BASE + 0x20001C))
-#define GPCLR0  ((volatile u32 *)(PERIPHERAL_BASE + 0x200028))
-
-#define AUX_IRQ ((volatile u32 *)(PERIPHERAL_BASE + 0x215000))
-#define AUX_ENABLES ((volatile u32 *)(PERIPHERAL_BASE + 0x215004)) // enable mini uart on raspberry pi
-#define AUX_MU_IO_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215040)) // used to read/write 8 bits of data to the FIFO, all the other bits other ignored or cleared to 0
-
-#define AUX_MU_IER_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215044))
-#define AUX_MU_IIR_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215048)) // clear T/C FIFO
-
-#define AUX_MU_LCR_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x21504C)) // bottom 2 bits says whether there are 7 or 8 data bits after the start bit. note that there is no 'stop' bit in raspberry pi uart
-#define AUX_MU_MCR_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215050))
-#define AUX_MU_LSR_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215054)) // tells us whether there is any data inside the fifo(both for reciever/transmitter), and if there was any reciever overrun(overflow)
-#define AUX_MU_MSR_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215058))
-#define AUX_MU_SCRATCH ((volatile u32 *)(PERIPHERAL_BASE + 0x21505c))
-#define AUX_MU_CNTL_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215060)) // bit 0 is 'receiver enable', bit 1 is 'transmitter enable', these bits are set on reset
-#define AUX_MU_STAT_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215064)) // similiar to AUX_MU_LSR_REG, but gives us more information(i.e how many 'bits' are available in T/R FIFO?)
-#define AUX_MU_BAUD_REG ((volatile u32 *)(PERIPHERAL_BASE + 0x215068)) // configure the baud rate using the equation : system_clock_freq(*10^6, because we need this in HZ not MHZ) / (8*(AUX_MU_BAUD_REG + 1))
+#include "muart.c"
 
 int 
 notmain(void)
 {
+    // we would assume that the bootloader already initialized the UART
+#if 0
     // initialize uart
-    *((AUX_ENABLES)) = 1;
-    *((AUX_MU_IER_REG)) = 0; // disable interrupt
-    //*((volatile u32 *)(AUX_MU_CNTL_REG)) = 3; // enable transmitter 
-    *((AUX_MU_LCR_REG)) = 3; // data = 8 bits
-    *((AUX_MU_MCR_REG)) = 0; 
-    *((AUX_MU_IIR_REG)) = 0x6; // clear T/C FIFOs
-    // *(u32 *)(AUX_MU_IIR_REG) = 0xC6; // clear T/C FIFO
-    // *((AUX_MU_BAUD_REG)) = 270; // TODO(gh) system clock freq is not 400mhz in raspberry pi 3?
-    *((AUX_MU_BAUD_REG)) = 433; // TODO(gh) system clock freq is not 400mhz in raspberry pi 3?
-
-    // enable gpio 14(PI's transmitter), 15(PI's receiver) to for UART 
+    *(AUX_ENABLES) = 1; // enable uart
+    *(AUX_MU_CNTL_REG) = 3; // enable t/r
+    *(AUX_MU_LCR_REG) = 3; // data = 8 bits
+    *(AUX_MU_IER_REG) = 0; // disable t/r  interrupts
+    *(AUX_MU_IIR_REG) = 0x6; // clear t/r FIFOs
+    // *((AUX_MU_BAUD_REG)) = 270; // force_tubo = 0 in config.txt
+    // *(AUX_MU_BAUD_REG) = 1301; // force_tubo = 1, baud rate = 38400
+    *(AUX_MU_BAUD_REG) = 433; // force_tubo = 1, baud rate = 115200
+    // *((AUX_MU_BAUD_REG)) = 249999; // force_tubo = 1, baud rate = 200
+    // enable gpio 14(PI's transmitter), 15(PI's receiver) for mini UART 
     u32 xu32_GPFSEL1 = *((GPFSEL1));
     xu32_GPFSEL1 &= ~((0x77) << 12);
     xu32_GPFSEL1 |= (2<<12)|(2<<15);
-    *((GPFSEL1)) = xu32_GPFSEL1;
+    *(GPFSEL1) = xu32_GPFSEL1;
+#endif
 
 #if 0
     // set GPIO 29 function to 'output'
@@ -64,11 +40,48 @@ notmain(void)
     *(u32 *)(GPFSEL2) = xu32_GPFSEL;
 #endif
 
-    u64 xu64_pc = get_pc();
+    // TODO(gh) this is not precise, since the timer starts with some arbitrary number 
+    // is there any way to reset the timer?
+    // wait until the uart is set & fifos are flushed. 
+    // TODO(gh) is this really required?
+#define TARGET_TIMER 0x00400000
+#if 0
     while(1)
     {
-        muart_transmit_32((u32)xu64_pc, (u64)AUX_MU_LSR_REG, (u64)AUX_MU_IO_REG);
+        u32 xu32_system_timer = *(SYSTEM_TIMER);
+        if((xu32_system_timer & TARGET_TIMER) == 0x00400000)
+        {
+            break;
+        }
     }
+#endif
+
+    // we starts at EL2
+    u32 xu32_EL = get_el();
+    muart_transmit_byte_as_number(xu32_EL);
+
+    u32 xu32_sctl_register = get_system_control_register();
+    u32 xu32_instruction_cache_enabled = (xu32_sctl_register >> 12) & 1;
+    muart_transmit_byte_as_number(xu32_instruction_cache_enabled); 
+
+    u32 xu32_data_cache_enabled = (xu32_sctl_register >> 2) & 1;
+    muart_transmit_byte_as_number(xu32_data_cache_enabled); 
+
+    u32 xu32_mmu_enabled = (xu32_sctl_register >> 0) & 1;
+    muart_transmit_byte_as_number(xu32_mmu_enabled);
+
+    muart_transmit_byte('h');
+    muart_transmit_byte('e');
+    muart_transmit_byte('l');
+    muart_transmit_byte('l');
+    muart_transmit_byte('o');
+    muart_transmit_byte(' ');
+    muart_transmit_byte('w');
+    muart_transmit_byte('o');
+    muart_transmit_byte('r');
+    muart_transmit_byte('l');
+    muart_transmit_byte('d');
+    muart_transmit_byte('!');
 
     return(0);
 }
@@ -76,25 +89,9 @@ notmain(void)
 // ================================================================================================================================================================================================
 // Questions
 
-// find out what is the cache sizes in raspberry pi 3 b+
-
-// it seems like there are multiple registers that I can use to attrieve the stats for the UART(is T/C FIFO empty, how many bits are available)
-// and also, AUX_MU_STAT_REG Register says that some of the stats that it is providing is not available in normal 16550 UART.
-
-// what does it mean that the 'FIFO' is always enabled, but I need to enable 'transmitter' & 'receiver' on UART?
-
-// when is uart interrupt useful?
-
-// ret x0 vs just ret? 
-
 // armv8 ABI(how many input registers?)
 
-// 115200 baud rate is being used very often, it's because it's the fastest one? 
-// uart only supports up to 115200 baud rate because it's very old?
-
-// how would you construct a multi-platform bare metal graphics project?(raspberry pi + windows/mac?)
-
-// parity bit - is it really needed? (i.e when I transfer my code, do I need a more stable uart(PL01 UART instead of mini UART) connection)
+// it seems like if you say kernel_old=1, you can make the bootloader to expect the kernel at 0 instead of 80000(3 b+)
 
 // 
 
