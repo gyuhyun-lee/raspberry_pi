@@ -7,3 +7,6 @@ force_turbo=1
 
 enable_uart=1
 enable_jtag_gpio=1
+gpio=22-27=a4
+gpio=22-27=np
+

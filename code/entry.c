@@ -3,9 +3,10 @@
 // extern functions from the assembly file
 extern u64 get_pc();
 extern u64 get_el();
-extern u32 get_system_control_register();
-extern void muart_transmit_32(u32 data, u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
+extern u32 get_system_control_register_el1();
+extern u32 get_system_control_register_el2();
 
+extern void muart_transmit_32(u32 data, u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
 extern u32 muart_receive_8(u64 uart_lsr_reg_addr, u64 AUX_MU_IO_REG_addr);
 
 #include "muart.c"
@@ -58,17 +59,17 @@ notmain(void)
 
     // we starts at EL2
     u32 xu32_EL = get_el();
-    muart_transmit_byte_as_number(xu32_EL);
+    muart_transmit_byte_as_hex(xu32_EL);
 
-    u32 xu32_sctl_register = get_system_control_register();
-    u32 xu32_instruction_cache_enabled = (xu32_sctl_register >> 12) & 1;
-    muart_transmit_byte_as_number(xu32_instruction_cache_enabled); 
+    u32 xu32_sctl_register_el2 = get_system_control_register_el2();
+    u32 xu32_instruction_cache_enabled = (xu32_sctl_register_el2 >> 12) & 1;
+    muart_transmit_byte_as_hex(xu32_instruction_cache_enabled); 
 
-    u32 xu32_data_cache_enabled = (xu32_sctl_register >> 2) & 1;
-    muart_transmit_byte_as_number(xu32_data_cache_enabled); 
+    u32 xu32_data_cache_enabled = (xu32_sctl_register_el2 >> 2) & 1;
+    muart_transmit_byte_as_hex(xu32_data_cache_enabled); 
 
-    u32 xu32_mmu_enabled = (xu32_sctl_register >> 0) & 1;
-    muart_transmit_byte_as_number(xu32_mmu_enabled);
+    u32 xu32_mmu_enabled = (xu32_sctl_register_el2 >> 0) & 1;
+    muart_transmit_byte_as_hex(xu32_mmu_enabled);
 
     muart_transmit_byte('h');
     muart_transmit_byte('e');
@@ -83,17 +84,20 @@ notmain(void)
     muart_transmit_byte('d');
     muart_transmit_byte('!');
 
+    // game loop
+    while(1)
+    {
+    }
+
     return(0);
 }
 
 // ================================================================================================================================================================================================
 // Questions
 
-// armv8 ABI(how many input registers?)
-
-// it seems like if you say kernel_old=1, you can make the bootloader to expect the kernel at 0 instead of 80000(3 b+)
-
-// 
+// predication
+// sve, sve2(128b - 2048b, based on the cpu vendors), shares the same vector registers + predication registers(execution mask)
+// neon cache bypass?
 
 // ================================================================================================================================================================================================
 // I learn!
@@ -109,7 +113,7 @@ notmain(void)
 // for a bare metal programming(without the OS), this won't be an issue since there is no virtual memory
 
 // branch target instruction cache
-// because of the instruction cache line is 64B in A53, some of the instructions will be pre-fetched after the branch even though the branch predictor predicts a different code path.
+// because the instruction cache line is 64B in A53, some of the instructions will be pre-fetched after the branch even though the branch predictor predicts a different code path.
 // some of these instructions would be stored in the branch target instruction cache, which means that if the branch prediction was wrong, 
 // the front end can just use this cache to avoid stalling(stalling of which part?)
 

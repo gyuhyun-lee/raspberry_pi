@@ -21,9 +21,14 @@ get_el :
     lsr x0, x0, 2
     ret
 
-.globl get_system_control_register
-get_system_control_register :
+.globl get_system_control_register_el1
+get_system_control_register_el1 :
     mrs x0, SCTLR_EL1
+    ret
+
+.globl get_system_control_register_el2
+get_system_control_register_el2 :
+    mrs x0, SCTLR_EL2
     ret
 
 

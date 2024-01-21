@@ -14,7 +14,7 @@ muart_transmit_byte(u32 c)
 }
 
 void 
-muart_transmit_byte_as_number(u32 b)
+muart_transmit_byte_as_hex(u32 b)
 {
     u32 h1 = (b >> 4) & 0xf;
     while(1)
@@ -48,6 +48,34 @@ muart_transmit_byte_as_number(u32 b)
     }
     h0 += 0x30;
     *AUX_MU_IO_REG = h0;
+}
+
+void
+muart_transmit_64_as_hex(u64 number)
+{
+    u32 xu32_bitshift = 64;
+    while(xu32_bitshift > 0)
+    {
+        xu32_bitshift -= 4;
+
+        u32 h = (number >> xu32_bitshift) & 0xf;
+        if(h >= 0xa)
+        {
+            h += 7;
+        }
+        h += 0x30;
+
+        // wait until we can transmist a byte
+        while(1)
+        {
+            u32 u32_lsr = *AUX_MU_LSR_REG;
+            if(u32_lsr & (1<<5))
+            {
+                break;
+            }
+        }
+        *AUX_MU_IO_REG = h;
+    }
 }
 
 inline u32 
